@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "Metadata for citing this educational ESP32 project."
+title: "ESP32 Wi-Fi Lab"
+type: software
+repository-code: "https://github.com/darwindiolimbo-crypto/esp32-wifi-lab"
+abstract: >-
+  An educational ESP32 project with a local web dashboard,
+  nearby Wi-Fi scanning, signal strength display, and device status.
+keywords:
+  - ESP32
+  - Wi-Fi
+  - Arduino
+  - Cybersecurity education
+  - IoT
