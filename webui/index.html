@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32 Wi-Fi Security Lab</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  background: #101827;
+  color: #edf2f7;
+  font-family: system-ui, sans-serif;
+}
+main { max-width: 700px; margin: auto; }
+h1 { font-size: 1.6rem; }
+p { color: #bac6d8; line-height: 1.5; }
+.panel {
+  background: #1b2739;
+  border: 1px solid #34435a;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 14px 0;
+}
+button {
+  width: 100%;
+  padding: 13px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #3275d9;
+  color: white;
+  font-size: 1rem;
+}
+.status { color: #8ee0b0; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #101827;
+  padding: 12px;
+  border-radius: 8px;
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>ESP32 Wi-Fi Security Lab</h1>
+  <p>Local dashboard for authorized wireless testing.</p>
+
+  <section class="panel">
+    <h2>Device status</h2>
+    <p class="status" id="status">Dashboard preview mode</p>
+    <p>ESP32 connection: <span id="connection">Not connected</span></p>
+  </section>
+
+  <section class="panel">
+    <h2>Wi-Fi reconnaissance</h2>
+    <p>Scan results will appear here when the ESP32
+       firmware and API are connected.</p>
+    <button onclick="scan()">Refresh scan results</button>
+    <pre id="results">No scan data available in preview mode.</pre>
+  </section>
+
+  <section class="panel">
+    <h2>Security assessment</h2>
+    <p>Use this section to record security settings,
+       authorized test results, and recommendations.</p>
+    <button onclick="report()">Show assessment checklist</button>
+    <pre id="report" hidden></pre>
+  </section>
+</main>
+<script>
+function scan() {
+  document.getElementById('results').textContent =
+    'Preview only. Live scanning requires the ESP32 firmware.';
+}
+function report() {
+  const el = document.getElementById('report');
+  el.hidden = false;
+  el.textContent =
+    '1. Record target SSID and router model.\n' +
+    '2. Record advertised security mode.\n' +
+    '3. Check WPS configuration.\n' +
+    '4. Document authorized test results.\n' +
+    '5. Recommend security improvements.';
+}
+</script>
+</body>
+</html>
