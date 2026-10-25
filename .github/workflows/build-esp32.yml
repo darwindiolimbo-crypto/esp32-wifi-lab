@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        - name: Show ESP32 platform version
+  run: arduino-cli core list
 
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
