@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "firmware/**"
+      - "webui/**"
       - ".github/workflows/build-esp32.yml"
 
 permissions:
