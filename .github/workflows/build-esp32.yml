@@ -1,48 +1,75 @@
-
 name: Build ESP32 Wi-Fi Lab
 
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
-      - "firmware/**"
-      - "webui/**"
-      - ".github/workflows/build-esp32.yml"
+      - 'firmware/**'
+      - 'webui/**'
+      - 'build-download/enhanced-candidate/**'
+      - '.github/workflows/build-esp32.yml'
 
 permissions:
   contents: read
 
 jobs:
-  compile:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install Arduino CLI
+      - name: Set up Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Configure ESP32 board package
+      - name: Install ESP32 Arduino core
         run: |
-          arduino-cli config init
+          arduino-cli config init --overwrite
           arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core update-index
           arduino-cli core install esp32:esp32
-          arduino-cli core list
 
-      - name: Compile firmware
+      - name: Validate enhanced embedded page
         run: |
-          mkdir -p build
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("build-download/enhanced-candidate/esp32_wifi_lab/esp32_wifi_lab.ino").read_text()
+          h = Path("webui/index.enhanced-candidate.html").read_text()
+          m = re.search(r'const char PAGE\[\]\s+PROGMEM\s*=\s*R"HTML\((.*?)\)HTML";', p, re.S)
+          assert m and m.group(1) == h, "Embedded HTML mismatch"
+          print("Enhanced HTML verified")
+          PY
+
+      - name: Compile original firmware
+        run: |
+          mkdir -p build/original
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
-            --output-dir build \
+            --output-dir build/original \
             firmware/esp32_wifi_lab
 
-      - name: Upload compiled firmware
+      - name: Compile enhanced candidate
+        run: |
+          mkdir -p build/enhanced
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            --output-dir build/enhanced \
+            build-download/enhanced-candidate/esp32_wifi_lab
+
+      - name: Upload original firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-wifi-lab-firmware
-          path: build/
+          name: esp32-wifi-lab-original
+          path: build/original/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload enhanced candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-wifi-lab-enhanced-candidate
+          path: build/enhanced/
           if-no-files-found: error
           retention-days: 14
