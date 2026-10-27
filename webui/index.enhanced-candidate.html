@@ -1,0 +1,213 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP32 Wi-Fi Lab WebUI 3.1</title>
+<style>
+body{margin:0;padding:18px;background:#101827;color:#edf2f7;font-family:system-ui,sans-serif}
+main{max-width:700px;margin:auto}
+section{background:#1b2739;border:1px solid #34435a;padding:16px;border-radius:12px;margin:14px 0}
+button{width:100%;padding:12px;margin:6px 0;border:0;border-radius:8px;background:#3275d9;color:white;font-size:1rem}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}input{width:100%;padding:11px;border-radius:8px;border:1px solid #52627a;background:#101827;color:#edf2f7;margin:6px 0}small{color:#bac6d8}.result{padding:10px;border-radius:8px;background:#101827}
+</style>
+</head>
+<body><main>
+<h1>ESP32 Wi-Fi Lab <small>WebUI 3.1</small></h1>
+<section>
+<h2>Device status</h2>
+<button onclick="status()">Refresh status</button>
+<pre id="status">Loading...</pre>
+</section>
+<section>
+<h2>Authorized penetration-test workflow</h2>
+<p><small>For networks you own or have written permission to assess. Reconnaissance and evidence logging only; no exploitation, deauthentication, credential cracking, or access-control bypass.</small></p>
+<label for="command">Lab command</label>
+<select id="command" style="width:100%;padding:11px;background:#101827;color:#edf2f7;border:1px solid #52627a;border-radius:8px">
+<option value="help">help — list commands</option><option value="scan">scan — passive Wi-Fi scan</option><option value="status">status — device health</option><option value="target">target — selected AP details</option><option value="assess">assess — security checklist</option><option value="router-audit">router-audit — universal router checks</option><option value="wps-check">wps-check — review WPS exposure</option><option value="fingerprint">fingerprint — summarize selected AP metadata</option><option value="export">export — report JSON guidance</option><option value="analyze">analyze — scan risk indicators</option><option value="memory">memory — heap diagnostics</option><option value="plaintext">plaintext — convert pasted output</option><option value="clear">clear — clear output</option>
+</select>
+<button onclick="runCommand()">Run lab command</button><pre id="consoleOutput">Select help and run command.</pre>
+</section>
+
+<section>
+<h2>Security scenario lab</h2>
+<p><small>Offline simulations only. These scenarios demonstrate attacker patterns and defensive evidence; they do not transmit attack traffic, attempt passwords/PINs, bypass access controls, or disconnect clients.</small></p>
+<label for="scenario">Scenario</label>
+<select id="scenario" style="width:100%;padding:11px;background:#101827;color:#edf2f7;border:1px solid #52627a;border-radius:8px">
+<option value="wps">WPS PIN attack pattern</option><option value="password">Password-guessing attack pattern</option><option value="deauth">Deauthentication / client disruption</option><option value="evil-twin">Evil-twin / rogue access point</option><option value="access">Access-control bypass attempt</option>
+</select>
+<button onclick="runScenario()">Run offline simulation</button>
+<pre id="scenarioOutput">Choose a scenario and run the simulation.</pre>
+</section>
+
+<section id="routerAssessment">
+<h2>Universal router assessment</h2>
+<p><small>Vendor-neutral checklist. Record evidence from the router's own admin UI, documentation, and logs; Wi-Fi beacon scans cannot prove these settings. WPS is assessed as advertised/configured; this panel does not attempt PINs.</small></p>
+<label for="routerVendor">Manufacturer</label><input id="routerVendor" maxlength="80" placeholder="e.g. TP-Link, ASUS, ZTE, MikroTik">
+<label for="routerModel">Model / hardware revision</label><input id="routerModel" maxlength="120" placeholder="Model and revision">
+<label for="routerFirmware">Firmware version</label><input id="routerFirmware" maxlength="120" placeholder="Firmware version/date">
+<label for="routerScope">Assessment scope / notes</label><input id="routerScope" maxlength="240" placeholder="Lab router, test date, evidence reference">
+<div id="routerChecks"></div>
+<button onclick="exportRouterAudit()">Export router assessment JSON</button>
+<pre id="routerAuditOutput">Complete checks and export a report.</pre>
+</section>
+
+<section>
+<h2>Result to plain text</h2>
+<p><small>Paste output from another tool or language (JSON, escaped logs, terminal-colored text, or HTML). Conversion is local and does not execute pasted code.</small></p>
+<label for="resultInput">Raw result</label>
+<textarea id="resultInput" rows="6" maxlength="20000" placeholder="Paste tool output here"></textarea>
+<button onclick="convertResult()">Convert to plain text</button>
+<pre id="plainTextOutput">Converted text will appear here.</pre>
+<button onclick="copyPlainText()">Copy plain text</button>
+</section>
+<section>
+<h2>Password & PIN audit</h2>
+<p><small>Local-only strength checks. Values are not sent to the ESP32, stored, or logged.</small></p>
+<label for="auditValue">Password or PIN to assess</label>
+<input id="auditValue" type="password" autocomplete="off" maxlength="128" placeholder="Enter a password or PIN">
+<label><input id="showValue" type="checkbox" style="width:auto" onchange="document.getElementById('auditValue').type=this.checked?'text':'password'"> Show input</label>
+<button onclick="audit('password')">Audit password strength</button>
+<button onclick="audit('pin')">Audit PIN strength</button>
+<pre id="auditResult">No audit run yet.</pre>
+</section>
+<section>
+<h2>Nearby networks / target selection</h2>
+<p><small>Choose a discovered AP for passive review. Selection does not connect to or test that network.</small></p>
+<button onclick="scan()">Scan Wi-Fi</button>
+<select id="target" style="width:100%;padding:11px;background:#101827;color:#edf2f7;border:1px solid #52627a;border-radius:8px"><option value="">No target selected</option></select>
+<button onclick="showTarget()">Show selected target details</button>
+<pre id="targetDetails">No target selected.</pre>
+<pre id="networks">Ready to scan.</pre>
+</section>
+<script>
+
+function runScenario(){
+ const kind=document.getElementById('scenario').value;
+ const out=document.getElementById('scenarioOutput');
+ const scenarios={
+  wps:{title:'WPS PIN attack pattern (SIMULATED)',events:['A tester identifies that WPS is advertised as enabled.','A real attack may attempt repeated PIN guesses; this simulator sends none.'],signals:['Unexpected WPS authentication/retry volume in AP logs','WPS enabled when it is not needed'],actions:['Disable WPS if unused','Update router firmware','Review AP authentication logs']},
+  password:{title:'Password-guessing pattern (SIMULATED)',events:['A hypothetical client submits repeated authentication attempts.','No credentials are generated, tested, or transmitted by this tool.'],signals:['Repeated failed authentication events from one station','Account or AP lockout/rate-limit events'],actions:['Use a long unique passphrase','Use WPA2-AES or WPA3','Review failed-authentication logs and rate-limit where supported']},
+  deauth:{title:'Deauthentication / disruption pattern (SIMULATED)',events:['A hypothetical burst of management-frame disconnect events is modeled.','No management frames are transmitted and no clients are disconnected.'],signals:['Unexpected spikes in deauthentication/disassociation frames','Clients reconnecting repeatedly without an expected AP event'],actions:['Use protected management frames (802.11w / PMF) where supported','Capture monitor-mode evidence with a separate authorized sensor','Correlate events with AP logs before concluding an attack']},
+  'evil-twin':{title:'Evil-twin / rogue AP pattern (SIMULATED)',events:['A second BSSID advertises a familiar SSID with a changed security mode.','The dashboard can compare scan metadata; this alone does not prove malice.'],signals:['Unexpected BSSID or security-mode changes','Unexpected certificate or captive-portal prompts','Signal/location changes inconsistent with known APs'],actions:['Verify BSSID against your AP inventory','Avoid entering credentials into unexpected portals','Use enterprise certificate validation where applicable']},
+  access:{title:'Access-control bypass pattern (SIMULATED)',events:['A hypothetical request attempts to access a protected endpoint without valid authorization.','No request is sent to a third-party system.'],signals:['HTTP 401/403 patterns, repeated invalid sessions, unusual endpoint access','Missing or inconsistent authorization checks in your own app tests'],actions:['Enforce authorization server-side on every protected route','Use short-lived sessions and rotate tokens','Test only against a local mock or system you control']}
+ };
+ const s=scenarios[kind];
+ out.textContent=s.title+'\n\nObserved simulation:\n• '+s.events.join('\n• ')+'\n\nDetection clues:\n• '+s.signals.join('\n• ')+'\n\nRecommended defenses:\n• '+s.actions.join('\n• ')+'\n\nResult: SIMULATION ONLY — no attack traffic sent.';
+}
+
+function audit(kind){
+ const input=document.getElementById('auditValue');
+ const value=input.value;
+ const out=document.getElementById('auditResult');
+ if(!value){out.textContent='Enter a value to assess.';return;}
+ let issues=[];
+ if(kind==='pin'){
+   if(!/^\d+$/.test(value)){out.textContent='PIN audit expects digits only.';return;}
+   if(value.length<6)issues.push('Short PIN: prefer 6+ digits where the system supports it.');
+   if(/^([0-9])\1+$/.test(value))issues.push('Repeated digit pattern.');
+   if(/^(0123|1234|2345|3456|4567|5678|6789|9876|8765|7654|6543|5432|4321)/.test(value))issues.push('Sequential digit pattern.');
+   if(/^(\d)\1+$/.test(value))issues.push('All digits are identical.');
+ } else {
+   if(value.length<12)issues.push('Under 12 characters; use a longer unique passphrase.');
+   if(!/[a-z]/.test(value)||!/[A-Z]/.test(value))issues.push('Consider mixed case if supported by the service.');
+   if(!/\d/.test(value))issues.push('Consider including a number.');
+   if(!/[^A-Za-z0-9]/.test(value))issues.push('Consider a symbol, or use a longer passphrase.');
+   if(/^(password|qwerty|letmein|admin|welcome|iloveyou)/i.test(value))issues.push('Common password pattern detected.');
+   if(/(.)\1{3,}/.test(value))issues.push('Repeated-character pattern detected.');
+ }
+ out.textContent=(issues.length?'Potential weaknesses:\\n• '+[...new Set(issues)].join('\\n• '):'No basic pattern issues detected.')+
+   '\\n\\nThis is a local heuristic, not a guarantee of security. Use a unique password/passphrase and a password manager.';
+}
+function analyzeNetworks(){const a=window.lastNetworks||[];if(!a.length)return 'No scan results. Run scan first.';const bySsid={};a.forEach(n=>{if(n.ssid)(bySsid[n.ssid]??=[]).push(n)});const issues=[];a.forEach(n=>{if(n.security==='Open'||n.security==='WEP')issues.push(`${n.ssid||'(hidden)'}: weak/open advertised security (${n.security})`)});Object.entries(bySsid).forEach(([ssid,items])=>{const modes=[...new Set(items.map(n=>n.security))];if(items.length>1&&modes.length>1)issues.push(`${ssid}: same SSID observed with differing security modes; verify manually`);if(items.length>1)issues.push(`${ssid}: duplicate SSID observed on ${items.length} BSSIDs; may be normal multi-AP coverage`)});return issues.length?'Risk indicators (verify manually):\n• '+issues.join('\n• '):'No basic risk indicators found in current scan. This is not proof that a network is safe.';}
+function showTarget(){const ssid=document.getElementById('target').value;const n=(window.lastNetworks||[]).find(x=>x.ssid===ssid);document.getElementById('targetDetails').textContent=n?`SSID: ${n.ssid}\nBSSID: ${n.bssid}\nChannel: ${n.channel}\nSignal: ${n.rssi} dBm\nSecurity: ${n.security}\n\nPassive metadata only; no connection or exploitation attempted.`:'Choose a network from the scan results first.';}
+function convertResultToPlainText(input) {
+  let text = String(input ?? '');
+  // Prefer readable, indented JSON when the input is valid JSON.
+  try {
+    const parsed = JSON.parse(text);
+    text = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+  } catch (_) {
+    // Also handle common escaped output copied from logs or another language.
+    text = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\n').replace(/\\t/g, '  ');
+    text = text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+  // Remove terminal color/control sequences and non-printing control bytes.
+  text = text.replace(/\\x1B\\[[0-?]*[ -/]*[@-~]/g, '').replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+  // Turn HTML fragments into visible text without executing markup.
+  if (/<[a-z!/][^>]*>/i.test(text)) {
+    const withoutActive = text.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ')
+      .replace(/<br\s*\/?\s*>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6]|pre)\s*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ');
+    text = withoutActive.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'");
+  }
+  return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() || '(No readable text found.)';
+}
+function convertResult() {
+  const source = document.getElementById('resultInput');
+  const output = document.getElementById('plainTextOutput');
+  output.textContent = convertResultToPlainText(source.value);
+}
+function copyPlainText(){
+ const text=document.getElementById('plainTextOutput').textContent;
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).catch(()=>{document.getElementById('plainTextOutput').textContent=text+'\n\nClipboard unavailable; select and copy manually.';});}
+ else document.getElementById('plainTextOutput').textContent=text+'\n\nClipboard unavailable; select and copy manually.';
+}
+const routerCheckItems=[
+['wifi_encryption','Wi-Fi encryption is WPA3 or WPA2-AES (not WEP/TKIP)'],
+['wps','WPS is disabled when not required; if enabled, documented and risk-accepted'],
+['pmf','Protected Management Frames (802.11w/PMF) enabled where supported'],
+['passphrase','Wi-Fi passphrase is unique and sufficiently long'],
+['admin_default','Default administrator credentials changed'],
+['admin_mfa','MFA enabled for cloud/admin account when available'],
+['remote_admin','WAN-side remote administration disabled or tightly restricted'],
+['https_admin','HTTPS used for local/remote administration where supported'],
+['firmware_updates','Firmware is supported and current; update path documented'],
+['eol','End-of-life status checked with vendor'],
+['upnp','UPnP disabled unless explicitly needed'],
+['port_forwarding','Port forwards reviewed; unused rules removed'],
+['dmz','DMZ host disabled unless justified'],
+['firewall_ipv4','IPv4 firewall enabled and inbound rules reviewed'],
+['firewall_ipv6','IPv6 firewall/inbound policy reviewed'],
+['guest_isolation','Guest network isolation verified'],
+['iot_separation','IoT devices segmented from trusted clients where possible'],
+['logs_alerts','Security logs, time sync, and alerting reviewed']
+];
+function renderRouterChecks(){const el=document.getElementById('routerChecks');if(!el)return;el.innerHTML='';routerCheckItems.forEach(([id,label])=>{const row=document.createElement('div');row.style.cssText='padding:8px;margin:6px 0;background:#101827;border-radius:8px';const l=document.createElement('label');l.textContent=label+' — ';const sel=document.createElement('select');sel.id='check_'+id;sel.style.cssText='padding:6px;background:#1b2739;color:#edf2f7;border:1px solid #52627a;border-radius:6px';[['unknown','Unknown'],['pass','Pass'],['finding','Finding'],['na','N/A']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o)});row.append(l,sel);el.appendChild(row)});}
+function buildRouterAudit(){const checks={};routerCheckItems.forEach(([id,label])=>checks[id]={label,status:document.getElementById('check_'+id)?.value||'unknown'});return {schema:'esp32-wifi-lab-router-audit-v1',created_at:new Date().toISOString(),device:'ESP32 Wi-Fi Lab WebUI 3.1',router:{manufacturer:document.getElementById('routerVendor').value.trim(),model:document.getElementById('routerModel').value.trim(),firmware:document.getElementById('routerFirmware').value.trim(),scope:document.getElementById('routerScope').value.trim()},checks,summary:{total:routerCheckItems.length,pass:Object.values(checks).filter(x=>x.status==='pass').length,findings:Object.values(checks).filter(x=>x.status==='finding').length,unknown:Object.values(checks).filter(x=>x.status==='unknown').length,not_applicable:Object.values(checks).filter(x=>x.status==='na').length},limitations:'Checklist records user-entered evidence; it does not remotely verify router configuration or run exploit traffic.'};}
+function exportRouterAudit(){const report=buildRouterAudit();const out=document.getElementById('routerAuditOutput');out.textContent=JSON.stringify(report,null,2);const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='esp32-router-assessment.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function wpsReview(){const nets=window.lastNetworks||[];if(!nets.length)return 'Run passive scan first. Beacon scan data may not reliably expose WPS status; verify WPS in the router administration interface or vendor documentation. No PIN attempts are made.';return 'WPS review for '+nets.length+' discovered AP(s):\n'+nets.map(n=>'• '+(n.ssid||'(hidden SSID)')+' / '+n.bssid+': WPS status not reliably established by this scan. Verify in router settings; disable WPS if unused.').join('\n')+'\nNo WPS PIN attempts or authentication requests were sent.';}
+function fingerprint(){const ssid=document.getElementById('target').value;const n=(window.lastNetworks||[]).find(x=>x.ssid===ssid);if(!n)return 'Select a target from passive scan results first.';return JSON.stringify({ssid:n.ssid,bssid:n.bssid,channel:n.channel,rssi_dbm:n.rssi,advertised_security:n.security,manufacturer:'Not reliably inferable from SSID alone',notes:'Passive metadata only; validate vendor/model using the router label or admin interface.'},null,2);}
+function runCommand(){const cmd=document.getElementById('command').value;const out=document.getElementById('consoleOutput');if(cmd==='help')out.textContent='Commands: help, scan, status, target, assess, router-audit, wps-check, fingerprint, export, analyze, memory, plaintext, clear\nPassive diagnostics, user-recorded router checks, offline simulations.';else if(cmd==='scan'){out.textContent='Scanning…';scan().then(()=>out.textContent=document.getElementById('networks').textContent);}else if(cmd==='status'){status().then(()=>out.textContent=document.getElementById('status').textContent);}else if(cmd==='target')out.textContent=document.getElementById('targetDetails').textContent;else if(cmd==='assess')out.textContent='Checklist: prefer WPA3 or WPA2-AES; disable WPS if not needed; update router firmware; change default admin credentials; use a unique passphrase; document findings.';else if(cmd==='router-audit')out.textContent=JSON.stringify(buildRouterAudit(),null,2);else if(cmd==='wps-check')out.textContent=wpsReview();else if(cmd==='fingerprint')out.textContent=fingerprint();else if(cmd==='export')out.textContent='Use Export router assessment JSON in the Universal router assessment section.';else if(cmd==='analyze')out.textContent=analyzeNetworks();else if(cmd==='memory'){status().then(()=>out.textContent=document.getElementById('status').textContent)}else if(cmd==='plaintext'){convertResult();out.textContent=document.getElementById('plainTextOutput').textContent;}else if(cmd==='clear')out.textContent='';}
+async function status(){
+try {
+const r=await fetch('/api/status');
+document.getElementById('status').textContent=await r.text();
+} catch(e) {
+document.getElementById('status').textContent='Device unavailable';
+}
+}
+async function scan(){
+const el=document.getElementById('networks');
+el.textContent='Scanning...';
+try {
+const r=await fetch('/api/scan');
+const data=await r.json();
+window.lastNetworks=data;
+const sel=document.getElementById('target'); const previous=sel.value;
+sel.innerHTML='<option value="">No target selected</option>';
+data.forEach(n=>{const o=document.createElement('option');o.value=n.ssid||'';o.textContent=(n.ssid||'(hidden SSID)')+' — '+n.security+' — '+n.rssi+' dBm';sel.appendChild(o);});
+if([...sel.options].some(o=>o.value===previous))sel.value=previous;
+el.textContent=data.length?data.map(n=>n.ssid+' | '+n.bssid+' | ch '+n.channel+' | '+n.rssi+' dBm | '+n.security).join('\n'):'No networks found.';
+} catch(e) {
+el.textContent='Scan failed.';
+}
+}
+renderRouterChecks();
+status();
+</script>
+</main></body></html>
